@@ -28,7 +28,7 @@ def quantify(args):
         "Apical-Palatal-0", "Apical-Palatal-2", "Apical-Palatal-4",
         "CEJ-Labial-0", "CEJ-Labial-2", "CEJ-Labial-4", 
         "Apical-Labial-0", "Apical-Labial-2", "Apical-Labial-4",
-        "Basal", "Palatal-Resorption", "Labial-Resorption"
+        "Basal", "Palatal-Resorption", "Labial-Resorption",
         "Palatal-Length", "Labial-Length"
     ]
     csv_file = os.path.join(args.result_path, 'quantify.csv')
@@ -149,19 +149,22 @@ def quantify(args):
         
         # Resorption
         left_intersection = get_intersections((top_left, bottom_left), bone_mask, max_gap=15)
-        right_intersection = get_intersections((top_right, bottom_right), bone_mask, max_gap=15)
-        left_dist = 0.0
+        left_length = np.linalg.norm(top_left - bottom_left)
+        left_dist = left_length
         if left_intersection :
-            left_dist = np.linalg.norm(top_left - np.array(left_intersection[1]))
+            left_dist -= np.linalg.norm(top_left - np.array(left_intersection[1]))
             cv2.line(img_vis, top_left, left_intersection[1], (60, 240, 60), 1)
         img_qnt["Palatal-Resorption"] = left_dist * 0.3
-        img_qnt["Palatal-Length"] = np.linalg.norm(top_left - bottom_left) * 0.3
-        right_dist = 0.0
+        img_qnt["Palatal-Length"] = left_length * 0.3
+        
+        right_intersection = get_intersections((top_right, bottom_right), bone_mask, max_gap=15)
+        right_length = np.linalg.norm(top_right - bottom_right)
+        right_dist = right_length
         if right_intersection :
-            right_dist = np.linalg.norm(top_right - np.array(right_intersection[1]))
+            right_dist -= np.linalg.norm(top_right - np.array(right_intersection[1]))
             cv2.line(img_vis, top_right, right_intersection[1], (60, 240, 60), 1)
         img_qnt["Labial-Resorption"] = right_dist * 0.3
-        img_qnt["Labial-Length"] = np.linalg.norm(top_right - bottom_right) * 0.3
+        img_qnt["Labial-Length"] = right_length * 0.3
         
         # save
         metrics = [
