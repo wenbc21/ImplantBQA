@@ -5,23 +5,28 @@ import cv2
 
 import math
 import uuid
-import random
 from typing import Optional
 
 import numpy as np
 import numpy.typing as npt
 import PIL.Image
 import PIL.ImageDraw
+import argparse
 
 
-def convert_labelme_to_nnunet(raw_file, out_file, random_seed=21):
-    os.makedirs(f"{out_file}/imagesTr", exist_ok=True)
-    os.makedirs(f"{out_file}/labelsTr", exist_ok=True)
-    os.makedirs(f"{out_file}/imagesTs", exist_ok=True)
-    os.makedirs(f"{out_file}/labelsTs", exist_ok=True)
-    os.makedirs(f"{out_file}/visualTr", exist_ok=True)
+def get_args_parser():
+    parser = argparse.ArgumentParser('', add_help=False)
+    parser.add_argument('--data_path', type=str, default='datasets/test/sagittal_plane/labelme')
+    parser.add_argument('--result_path', type=str, default='datasets/test')
+    return parser
 
-    files = [item.path for item in os.scandir(raw_file) if item.is_file()]
+
+def convert_labelme_to_mask(args):
+    os.makedirs(f"{args.result_path}/images", exist_ok=True)
+    os.makedirs(f"{args.result_path}/labels", exist_ok=True)
+    os.makedirs(f"{args.result_path}/visual", exist_ok=True)
+
+    files = [item.path for item in os.scandir(args.data_path) if item.is_file()]
     img_files = [f for f in files if f.endswith("png")]
     label_files = [f for f in files if f.endswith("json")]
     data_names = [os.path.splitext(os.path.basename(f))[0] for f in img_files]
@@ -29,39 +34,33 @@ def convert_labelme_to_nnunet(raw_file, out_file, random_seed=21):
     label_files.sort()
     data_names.sort()
 
-    random.seed(random_seed)
-    random.shuffle(data_names)
-    train_split = data_names[:round(0.8*len(data_names))]
-    val_split = data_names[round(0.8*len(data_names)):]
-    train_split.sort()
-    val_split.sort()
-    splits_final = [{"train":train_split,"val":val_split}]
-    with open(os.path.join(out_file, "splits_final.json"), 'w', encoding='utf-8') as sf:
-        json.dump(splits_final, sf, indent=4)
-
     for i in range(len(img_files)):
-        filename = os.path.split(img_files[i])[-1].split('.')[0]
-        print(filename, label_files[i], img_files[i])
+        filename = os.path.splitext(os.path.basename(img_files[i]))[0].replace("_0000", "")
+
+        # Load image + annotation
         data = json.load(open(label_files[i]))
-        lbl, _, lbl_names = labelme_shapes_to_label(cv2.imread(img_files[i]).shape[:2], data['shapes'])
+        lbl, _, _ = labelme_shapes_to_label(cv2.imread(img_files[i]).shape[:2], data['shapes'])
 
-        # make training data
+        # Convert to 0–1 binary mask
+        lbl = (lbl > 0).astype(np.uint8)
+
+        # Save grayscale image
         img = PIL.Image.open(img_files[i]).convert("L")
-        img.save(os.path.join(out_file, f"imagesTr", f"{filename}_0000.png"))
-        PIL.Image.fromarray(lbl).save(os.path.join(out_file, f"labelsTr", '{}.png'.format(filename)))
+        img.save(os.path.join(args.result_path, "images", f"{filename}.png"))
 
-        # make validation data
-        if filename in val_split :
-            img.save(os.path.join(out_file, f"imagesTs", f"{filename}_0000.png"))
-            PIL.Image.fromarray(lbl).save(os.path.join(out_file, f"labelsTs", '{}.png'.format(filename)))
+        # Save binary label map
+        PIL.Image.fromarray(lbl * 255).save(os.path.join(args.result_path, "labels", f"{filename}.png"))
 
-        # make visualization
-        img = PIL.Image.open(img_files[i]).convert("RGB")
-        boost = np.array([120, 0, 0], dtype=np.float32)
-        vis = np.array(img) + np.stack([lbl > 0] * 3, axis=-1) * boost
+        # Create visualization overlay
+        img_rgb = PIL.Image.open(img_files[i]).convert("RGB")
+        img_arr = np.array(img_rgb, dtype=np.float32)
+        overlay_color = np.array([255, 0, 0], dtype=np.float32)
+        vis = img_arr.copy()
+        vis[lbl > 0] = vis[lbl > 0] * 0.5 + overlay_color * 0.5
         vis = np.clip(vis, 0, 255).astype(np.uint8)
-        vis_img = PIL.Image.fromarray(vis)
-        vis_img.save(os.path.join(out_file, "visualTr", f"{filename}_vis.png"))
+        PIL.Image.fromarray(vis).save(os.path.join(args.result_path, "visual", f"{filename}.png"))
+
+        print(f"Saved: {filename}.png")
 
 
 def shape_to_mask(
@@ -146,8 +145,7 @@ def labelme_shapes_to_label(img_shape, shapes):
 
 
 if __name__ == '__main__':
-    
-    convert_labelme_to_nnunet(
-        raw_file='datasets/bone_seg/labelme',
-        out_file='datasets/bone_seg'
-    )
+    parser = argparse.ArgumentParser('', parents=[get_args_parser()])
+    args = parser.parse_args()
+
+    convert_labelme_to_mask(args)

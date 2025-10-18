@@ -5,38 +5,39 @@ import cv2
 import csv
 import argparse
 from data_utils import *
-import random
 import gc
 
 from scipy.spatial.transform import Rotation as R
 import scipy.ndimage
 from skimage.transform import rescale
 
-
 def get_args_parser():
     parser = argparse.ArgumentParser('', add_help=False)
-    parser.add_argument('--data_path', type=str, default='/home/amax/Project/wbc/ImplantGenerator/ImplantData/data/UpperAnterior')
-    parser.add_argument('--results_path', type=str, default='datasets/test/sagittal_plane')
+    parser.add_argument('--data_path', type=str, default='datasets')
+    parser.add_argument('--predict_path', type=str, default='datasets/inference/rebuild_nii_predict')
+    parser.add_argument('--results_path', type=str, default='datasets/inference/sagittal_plane')
     parser.add_argument('--spacing', type=int, default=0.3)
     return parser
 
 
 def main(args):
     
-    cbct_data_path = [item.path for item in os.scandir(f"{args.data_path}/CBCT") if item.is_dir()]
+    cbct_data_path = [item.path for item in os.scandir(f"/home/amax/Project/wbc/ImplantGenerator/ImplantData/data/UpperAnterior/CBCT") if item.is_dir()]
     cbct_data_path.sort()
-    stl_data_path = [item.path for item in os.scandir(f"{args.data_path}/STL") if item.is_file()]
-    stl_data_path.sort()
-    assert len(cbct_data_path) == len(stl_data_path), "data number not aligned!"
-
+    predict_path = [item.path for item in os.scandir(args.predict_path) if item.is_file()]
+    predict_path.sort()
+    
+    cbct_index = {}
+    for it in range(len(cbct_data_path)) :
+        cbct_index[os.path.split(cbct_data_path[it])[-1][:3]] = cbct_data_path[it]
+    
     data_id = []
-    val_split = []
     spacing_dict = {}
     window_dict = {}
     width_dict = {}
     mip_window_dict = {}
     mip_width_dict = {}
-    with open(f'/home/amax/Project/wbc/ImplantGenerator/ImplantData/data/UpperAnterior/metadata.csv', mode='r', encoding='utf-8') as file:
+    with open(f'datasets/trainval/metadata.csv', mode='r', encoding='utf-8') as file:
         reader = csv.DictReader(file)
         for row in reader:
             id = row['ID'].zfill(3)
@@ -46,44 +47,33 @@ def main(args):
             width_dict[id] = float(row['Width'])
             mip_window_dict[id] = float(row['MIPWindow'])
             mip_width_dict[id] = float(row['MIPWidth'])
-    
-    random.seed(21)
-    random.shuffle(data_id)
-    val_split = data_id[round(0.8*len(data_id)):]
 
     os.makedirs(f"{args.results_path}/auxiliary", exist_ok=True)
     os.makedirs(f"{args.results_path}/image", exist_ok=True)
     os.makedirs(f"{args.results_path}/implant", exist_ok=True)
     os.makedirs(f"{args.results_path}/combined", exist_ok=True)
 
-    for it in range(len(cbct_data_path)):
-        cbct_path = cbct_data_path[it]
-        stl_path = stl_data_path[it]
-        data_name = os.path.split(cbct_path)[-1][:3]
-
-        if data_name not in val_split :
-            continue
-
+    for it in range(len(predict_path)) :
+        # get dicom file and pcd file
+        data_name = os.path.basename(predict_path[it]).split('.')[0]
+        data_id = data_name[-3:]
+        cbct_path = cbct_index[data_id]
         dicom = get_dcm_3d_array(cbct_path)
-        if spacing_dict[data_name] != args.spacing:
-            dicom = rescale(dicom, spacing_dict[data_name] / args.spacing, order=1, preserve_range=True)
-        dicom_mip = window_transform_3d(dicom, window_width=mip_width_dict[data_name], window_center=mip_window_dict[data_name]).astype(np.uint8)
-        dicom_norm = window_transform_3d(dicom, window_width=width_dict[data_name], window_center=window_dict[data_name]).astype(np.uint8)
+        if spacing_dict[data_id] != args.spacing:
+            dicom = rescale(dicom, spacing_dict[data_id] / args.spacing, order=1, preserve_range=True)
+        dicom_norm = window_transform_3d(dicom, window_width=width_dict[data_id], window_center=window_dict[data_id]).astype(np.uint8)
+        dicom_mip = window_transform_3d(dicom, window_width=mip_width_dict[data_id], window_center=mip_window_dict[data_id]).astype(np.uint8)
 
         cs_upper, cs_lower, cs_front, cs_rear, cs_left, cs_right = get_cross_section(
-            dicom, False, data_name, args.results_path, mip_window_dict[data_name], mip_width_dict[data_name])
+            dicom, False, data_name, args.results_path, mip_window_dict[data_id], mip_width_dict[data_id])
 
-        upper_center, lower_center, centroid, radius, length, direction = get_stl(stl_path)
-        upper_center, lower_center, centroid, radius, length, direction = cylinder_transform(
-            [upper_center, lower_center, centroid, radius, length, direction], 
-            dicom.shape, 
-            args.spacing
-        )
-        implant = cylinder_render(centroid, dicom.shape, direction, length, radius)
+        predict = sitk.ReadImage(predict_path[it])
+        predict = sitk.GetArrayFromImage(predict)
 
-        cylinder = np.array(np.where(implant == 1))
-        cs_num = np.min(cylinder[0])
-        mask_slice = implant[cs_num+5]
+        # get central position of cylinder
+        implant = np.array(np.where(predict == 1))
+        cs_num = np.min(implant[0])
+        mask_slice = predict[cs_num+5]
         ys, zs = np.where(mask_slice == 1)
         midy = (np.min(ys) + np.max(ys)) // 2
         midz = (np.min(zs) + np.max(zs)) // 2
@@ -134,7 +124,7 @@ def main(args):
 
         offset = center - rotation_matrix @ center
         rotated_volume = scipy.ndimage.affine_transform(dicom_norm, rotation_matrix, offset=offset, order=1)
-        rotated_implant = scipy.ndimage.affine_transform(implant, rotation_matrix, offset=offset, order=1)
+        rotated_implant = scipy.ndimage.affine_transform(predict, rotation_matrix, offset=offset, order=1)
         cylinder_aligned = np.array(np.where(rotated_implant == 1))
         midy = (np.min(cylinder_aligned[1]) + np.max(cylinder_aligned[1])) // 2
         rotated_point = rotation_matrix @ original_point
