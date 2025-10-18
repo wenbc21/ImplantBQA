@@ -15,13 +15,14 @@ def get_args_parser():
 def quantify(args):
     # input
     img_files = [item.path for item in os.scandir(f"{args.data_path}/images") if item.is_file()]
-    seg_files = [item.path for item in os.scandir(f"{args.data_path}/labels") if item.is_file()]
+    seg_files = [item.path for item in os.scandir(f"{args.data_path}/sagittal_plane/predict") if item.is_file()]
     implant_files = [item.path for item in os.scandir(f"{args.data_path}/sagittal_plane/implant") if item.is_file()]
     img_files.sort()
     seg_files.sort()
     implant_files.sort()
     
     # output
+    os.makedirs(f"{args.result_path}/visualization", exist_ok=True)
     headers = [
         "Name", 
         "CEJ-Palatal-0", "CEJ-Palatal-2", "CEJ-Palatal-4", 
@@ -35,7 +36,6 @@ def quantify(args):
     with open(csv_file, mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(headers)
-    os.makedirs(f"{args.result_path}/visualization", exist_ok=True)
 
     # quantify
     for i in range(len(seg_files)):
