@@ -87,13 +87,13 @@ def quantify(args):
         cv2.drawContours(bone_mask, [closest_contour], contourIdx=-1, color=255, thickness=-1)
         
         # bbox
-        sorted_box = sorted(box, key=lambda p: p[0])
-        left_points = sorted_box[:2]
-        right_points = sorted_box[2:]
-        left_points_sorted = sorted(left_points, key=lambda p: p[1])
-        top_right, top_left = left_points_sorted[0], left_points_sorted[1]
-        right_points_sorted = sorted(right_points, key=lambda p: p[1])
-        bottom_right, bottom_left = right_points_sorted[0], right_points_sorted[1]
+        sorted_box = sorted(box, key=lambda p: p[1])
+        top_points = sorted_box[:2]
+        bottom_points = sorted_box[2:]
+        top_points_sorted = sorted(top_points, key=lambda p: p[0])
+        top_left, top_right = top_points_sorted[0], top_points_sorted[1]
+        bottom_points_sorted = sorted(bottom_points, key=lambda p: p[0])
+        bottom_left, bottom_right = bottom_points_sorted[0], bottom_points_sorted[1]
         
         # axis
         long_axis_vector = np.array([top_left[0] - bottom_left[0], top_left[1] - bottom_left[1]], dtype=float)
@@ -168,12 +168,12 @@ def quantify(args):
         
         # save
         metrics = [
-            f"{img_qnt["CEJ-Palatal-0"]:.4f}", f"{img_qnt["CEJ-Palatal-2"]:.4f}", f"{img_qnt["CEJ-Palatal-4"]:.4f}", 
-            f"{img_qnt["Apical-Palatal-0"]:.4f}", f"{img_qnt["Apical-Palatal-2"]:.4f}", f"{img_qnt["Apical-Palatal-4"]:.4f}", 
-            f"{img_qnt["CEJ-Labial-0"]:.4f}", f"{img_qnt["CEJ-Labial-2"]:.4f}", f"{img_qnt["CEJ-Labial-4"]:.4f}", 
-            f"{img_qnt["Apical-Labial-0"]:.4f}", f"{img_qnt["Apical-Labial-2"]:.4f}", f"{img_qnt["Apical-Labial-4"]:.4f}", 
-            f"{img_qnt["Basal"]:.4f}", f"{img_qnt["Palatal-Resorption"]:.4f}", f"{img_qnt["Labial-Resorption"]:.4f}", 
-            f"{img_qnt["Palatal-Length"]:.4f}", f"{img_qnt["Labial-Length"]:.4f}", 
+            f'{img_qnt["CEJ-Palatal-0"]:.4f}',      f'{img_qnt["CEJ-Palatal-2"]:.4f}', f'{img_qnt["CEJ-Palatal-4"]:.4f}', 
+            f'{img_qnt["Apical-Palatal-0"]:.4f}',   f'{img_qnt["Apical-Palatal-2"]:.4f}', f'{img_qnt["Apical-Palatal-4"]:.4f}', 
+            f'{img_qnt["CEJ-Labial-0"]:.4f}',      f'{img_qnt["CEJ-Labial-2"]:.4f}', f'{img_qnt["CEJ-Labial-4"]:.4f}', 
+            f'{img_qnt["Apical-Labial-0"]:.4f}',    f'{img_qnt["Apical-Labial-2"]:.4f}', f'{img_qnt["Apical-Labial-4"]:.4f}', 
+            f'{img_qnt["Basal"]:.4f}',              f'{img_qnt["Palatal-Resorption"]:.4f}', f'{img_qnt["Labial-Resorption"]:.4f}', 
+            f'{img_qnt["Palatal-Length"]:.4f}',     f'{img_qnt["Labial-Length"]:.4f}'
         ]
         with open(csv_file, mode='a', newline='') as file:
             writer = csv.writer(file)

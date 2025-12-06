@@ -64,11 +64,11 @@ def convert_labelme_to_mask(args):
 
 
 def shape_to_mask(
-    img_shape: tuple[int, ...],
-    points: list[list[float]],
-    shape_type: Optional[str] = None,
-    line_width: int = 10,
-    point_size: int = 5,
+    img_shape,
+    points,
+    shape_type= None,
+    line_width = 10,
+    point_size= 5,
 ) -> npt.NDArray[np.bool_]:
     mask = PIL.Image.fromarray(np.zeros(img_shape[:2], dtype=np.uint8))
     draw = PIL.ImageDraw.Draw(mask)
